@@ -32,7 +32,18 @@ func main(){
         showConfigs(configs, afters)
         return
     }
+
+    for _, task := range configs {
+        runTask(task);
+    }
 }
+
+func runTask(task TaskConfig){
+
+    fmt.Printf("running task %v\n", task.Cmd);
+}
+
+
 
 func loadConfigs(taskYamlPath string ) (configs map[string]TaskConfig, afters map[string][]TaskConfig) {
 
@@ -43,7 +54,6 @@ func loadConfigs(taskYamlPath string ) (configs map[string]TaskConfig, afters ma
 
     configs = map[string]TaskConfig{}
 
-    //err := yaml.Unmarshal([]byte(yamlStr), &configs)
     err = yaml.Unmarshal(yamlBytes, &configs)
     if err != nil {
         log.Fatalf("error: %v", err)
@@ -52,9 +62,11 @@ func loadConfigs(taskYamlPath string ) (configs map[string]TaskConfig, afters ma
     afters = map[string][]TaskConfig{}
 
     for taskName, task := range configs {
+        // TODO this apparently is only a copy? how to get a pointer?
         task.Name = taskName
         slice := make([]TaskConfig, 5, 5) // lenght of x with room for y more
 
+        // TODO make range dynamic, set to correct one
         for _, after := range task.After {
             afters[after] = slice
             afters[after][0] = task
@@ -78,51 +90,3 @@ func showConfigs(configs map[string]TaskConfig, afters map[string][]TaskConfig){
         fmt.Printf("------------------\n")
     }
 }
-/*
-func main(){
-    //configs := map[string]taskConfig{}
-    println("hi, mom!")
-
-    configs := make(map[interface{}]interface{})
-
-    err := yaml.Unmarshal([]byte(data), &configs)
-    if err != nil {
-        log.Fatalf("error: %v", err)
-    }
-
-    fmt.Printf("--- configs are:\n%v\n\n", configs)
-    task := configs["task3"]
-
-    //type cast the interface into a map
-    m, errThing := task.(map[string]string) 
-    if errThing {
-fmt.Printf("this is the failed thing %v\n", m)
-        log.Fatalf("Can not convert value to map")
-    }
-    fmt.Printf("here is m: %v \n", m)
-
-    fmt.Printf("descr is %v\n", m["descr"])
-//
-//    fmt.Printf("--- task4:\n%v\n\n", task)
-//
-//    fmt.Printf("    taskmap: %v\n", taskmap)
-//
-//    err := yaml.Unmarshal([]byte(data), &configs)
-//    if err != nil {
-//            log.Fatalf("error: %v", err)
-//    }
-//
-//    fmt.Printf("--- t:\n%v\n\n", configs)
-//
-//
-//    task := configs["task4"]
-//    marshalled, err := yaml.Marshal(&task)
-//    println("marshalled task is ", string(marshalled))
-//    //configs["task4"].name = "setting afterwards"
-//
-//    println("descr is ", configs["task4"].descr)
-//    println(configs["task4"].cmd)
-
-
-}
- */
