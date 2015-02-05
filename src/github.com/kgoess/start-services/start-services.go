@@ -62,14 +62,11 @@ func loadConfigs() (configs map[string]TaskConfig, afters map[string][]TaskConfi
 
     for taskName, task := range configs {
         task.Name = taskName
-        fmt.Printf("task:  %v (run after: %v)\ndescr: %v\n\t%v\n------------------\n",
-             taskName, task.After, task.Descr, task.Cmd)
         slice := make([]TaskConfig, 5, 5) // lenght of x with room for y more
 
         for _, after := range task.After {
             afters[after] = slice
             afters[after][0] = task
-            fmt.Printf("after task '%s' we'll run '%s' %v\n", after, taskName, task);
         }
     }
 
