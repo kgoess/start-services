@@ -34,6 +34,7 @@ task4:
   descr: this task goes after 1 and 2
 `
 type TaskConfig struct {
+    Name string
     After []string
     Cmd []string
     Descr string
@@ -45,7 +46,7 @@ type TaskConfig struct {
 func main(){
     configs, afters := loadConfigs()
 
-    fmt.Println(configs, afters)
+    showConfigs(configs, afters)
 }
 
 func loadConfigs() (configs map[string]TaskConfig, afters map[string][]TaskConfig) {
@@ -60,9 +61,10 @@ func loadConfigs() (configs map[string]TaskConfig, afters map[string][]TaskConfi
     afters = map[string][]TaskConfig{}
 
     for taskName, task := range configs {
+        task.Name = taskName
         fmt.Printf("task:  %v (run after: %v)\ndescr: %v\n\t%v\n------------------\n",
              taskName, task.After, task.Descr, task.Cmd)
-        slice := make([]TaskConfig, 10, 15)
+        slice := make([]TaskConfig, 5, 5) // lenght of x with room for y more
 
         for _, after := range task.After {
             afters[after] = slice
@@ -72,9 +74,22 @@ func loadConfigs() (configs map[string]TaskConfig, afters map[string][]TaskConfi
     }
 
     return configs, afters
-
 }
-
+func showConfigs(configs map[string]TaskConfig, afters map[string][]TaskConfig){
+    for taskName, task := range configs {
+        fmt.Printf("task:  %v (run after: %v)\ndescr: %v\n\t%v\n",
+             taskName, task.After, task.Descr, task.Cmd)
+        afterList, exists := afters[taskName]
+        if exists {
+            for _, after := range afterList {
+                if after.Name != ""  {
+                    fmt.Printf("after this we'll run: %s\n", after.Name)
+                }
+            }
+        }
+        fmt.Printf("------------------\n")
+    }
+}
 /*
 func main(){
     //configs := map[string]taskConfig{}
