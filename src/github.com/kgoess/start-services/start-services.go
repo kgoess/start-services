@@ -36,6 +36,12 @@ config:
 var data2 = `
 ---
 items: 
+     - name: task3
+       after: 
+       cmd:
+         - /bin/ls
+         - adsfadfasdf
+       descr: this is expected to fail
      - name: task4
        after:
           - task1
