@@ -1,59 +1,46 @@
 package main
 
 import (
+        "flag"
         "fmt"
         "log"
         "gopkg.in/yaml.v2"
+        "os"
+        "io/ioutil"
 )
 
-var yamlStr = `
----
-task1:
-  cmd:
-    - /bin/echo
-    - task 1 is running
-  descr: this task just runs echo
-task2:
-  cmd:
-    - /bin/sleep
-    - 3
-  descr: sleeps for a couple secs
-task3:
-  after: 
-  cmd:
-    - /bin/ls
-    - adsfadfasdf
-  descr: this is expected to fail
-task4:
-  after:
-     - task1
-     - task2
-  cmd:
-    - /bin/echo
-    - 99
-  descr: this task goes after 1 and 2
-`
 type TaskConfig struct {
     Name string
     After []string
     Cmd []string
     Descr string
 }
-//type Configs struct {
-//    Items []TaskConfig 
-//}
+
+
+var taskYamlPath = flag.String("taskfile", "", "path to yaml with tasks")
 
 func main(){
-    configs, afters := loadConfigs()
+    flag.Parse()
+	if len(*taskYamlPath) == 0 {
+		flag.Usage()
+		os.Exit(1)
+	}
+    configs, afters := loadConfigs(*taskYamlPath)
 
     showConfigs(configs, afters)
 }
 
-func loadConfigs() (configs map[string]TaskConfig, afters map[string][]TaskConfig) {
+func loadConfigs(taskYamlPath string ) (configs map[string]TaskConfig, afters map[string][]TaskConfig) {
+
+    yamlBytes, err := ioutil.ReadFile(taskYamlPath)
+    if err != nil {
+        log.Fatalf("error: %v", err)
+    }
 
     configs = map[string]TaskConfig{}
 
-    err := yaml.Unmarshal([]byte(yamlStr), &configs)
+    //err := yaml.Unmarshal([]byte(yamlStr), &configs)
+    err = yaml.Unmarshal(yamlBytes, &configs)
     if err != nil {
         log.Fatalf("error: %v", err)
     }

@@ -1,0 +1,25 @@
+---
+task1:
+  cmd:
+    - /bin/echo
+    - task 1 is running
+  descr: this task just runs echo
+task2:
+  cmd:
+    - /bin/sleep
+    - 3
+  descr: sleeps for a couple secs
+task3:
+  after: 
+  cmd:
+    - /bin/ls
+    - adsfadfasdf
+  descr: this is expected to fail
+task4:
+  after:
+     - task1
+     - task2
+  cmd:
+    - /bin/echo
+    - 99
+  descr: this task goes after 1 and 2
