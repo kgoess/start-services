@@ -43,18 +43,35 @@ type TaskConfig struct {
 //}
 
 func main(){
-    configs := map[string]TaskConfig{}
-    //configs := Configs{}
+    configs, afters := loadConfigs()
+
+    fmt.Println(configs, afters)
+}
+
+func loadConfigs() (configs map[string]TaskConfig, afters map[string][]TaskConfig) {
+
+    configs = map[string]TaskConfig{}
 
     err := yaml.Unmarshal([]byte(yamlStr), &configs)
     if err != nil {
         log.Fatalf("error: %v", err)
     }
 
-    for key, task := range configs {
+    afters = map[string][]TaskConfig{}
+
+    for taskName, task := range configs {
         fmt.Printf("task:  %v (run after: %v)\ndescr: %v\n\t%v\n------------------\n",
-             key, task.After, task.Descr, task.Cmd)
+             taskName, task.After, task.Descr, task.Cmd)
+        slice := make([]TaskConfig, 10, 15)
+
+        for _, after := range task.After {
+            afters[after] = slice
+            afters[after][0] = task
+            fmt.Printf("after task '%s' we'll run '%s' %v\n", after, taskName, task);
+        }
     }
+
+    return configs, afters
 
 }
 
