@@ -18,6 +18,7 @@ type TaskConfig struct {
 
 
 var taskYamlPath = flag.String("taskfile", "", "path to yaml with tasks")
+var showConfigsFlag = flag.Bool("showconfigs", false, "dump the configs")
 
 func main(){
     flag.Parse()
@@ -27,7 +28,10 @@ func main(){
 	}
     configs, afters := loadConfigs(*taskYamlPath)
 
-    showConfigs(configs, afters)
+    if *showConfigsFlag {
+        showConfigs(configs, afters)
+        return
+    }
 }
 
 func loadConfigs(taskYamlPath string ) (configs map[string]TaskConfig, afters map[string][]TaskConfig) {
