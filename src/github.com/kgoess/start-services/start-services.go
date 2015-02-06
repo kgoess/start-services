@@ -3,10 +3,11 @@ package main
 import (
         "flag"
         "fmt"
-        "log"
         "gopkg.in/yaml.v2"
-        "os"
         "io/ioutil"
+        "log"
+        "os"
+        "sync"
 )
 
 type TaskConfig struct {
@@ -61,17 +62,28 @@ func main(){
     }
 
     // now actually run them
+    var wg sync.WaitGroup
+
     for taskName, task := range configs {
         whenFinishedCallCh := taskDoneChs[taskName]
         waitForChs := waitForChsForTask[taskName]
-        runTask(task, waitForChs, whenFinishedCallCh);
+        wg.Add(1)
+        go runTask(task, waitForChs, whenFinishedCallCh, &wg);
     }
+    wg.Wait()
+
 }
 
-func runTask(task TaskConfig, waitForChs []chan bool, whenFinishedCallCh chan bool){
+func runTask(
+        task TaskConfig, 
+        waitForChs []chan bool, 
+        whenFinishedCallCh chan bool, 
+        wg *sync.WaitGroup,
+    ){
 
     fmt.Printf("running task %v, after %s will respond on chan %v\n", 
             task.Cmd, waitForChs, whenFinishedCallCh);
+    wg.Done()
 }
 
 
