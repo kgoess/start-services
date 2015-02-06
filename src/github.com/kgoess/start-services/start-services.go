@@ -33,14 +33,45 @@ func main(){
         return
     }
 
-    for _, task := range configs {
-        runTask(task);
+    // give each task its own channel to report 'done' on
+    taskDoneChs := make(map[string]chan bool)
+    for taskName, _ := range configs {
+        taskDoneChs[taskName] = make(chan bool)
+    }
+
+    waitForChsForTask := make(map[string] []chan bool)
+
+    // set up the do-after parts to wait for
+    for taskName, task := range configs {
+        waitForChs := make([]chan bool, 0, 5)
+        for _, afterKey := range task.After {
+            //see http://blog.golang.org/go-slices-usage-and-internals
+            //    var p []int // == nil
+
+            fmt.Printf("after %s we'll run %s\n", afterKey, taskName);
+
+            if len(waitForChs) == cap(waitForChs) {
+                newSlice := make([]chan bool, len(waitForChs) +1, len(waitForChs) + 5)
+                waitForChs = newSlice
+            }
+            waitForChs = append(waitForChs, taskDoneChs[afterKey])
+            fmt.Printf("%v\n", waitForChs)
+            waitForChsForTask[taskName] = waitForChs
+        }
+    }
+
+    // now actually run them
+    for taskName, task := range configs {
+        whenFinishedCallCh := taskDoneChs[taskName]
+        waitForChs := waitForChsForTask[taskName]
+        runTask(task, waitForChs, whenFinishedCallCh);
     }
 }
 
-func runTask(task TaskConfig){
+func runTask(task TaskConfig, waitForChs []chan bool, whenFinishedCallCh chan bool){
 
-    fmt.Printf("running task %v\n", task.Cmd);
+    fmt.Printf("running task %v, after %s will respond on chan %v\n", 
+            task.Cmd, waitForChs, whenFinishedCallCh);
 }
 
 
@@ -64,12 +95,15 @@ func loadConfigs(taskYamlPath string ) (configs map[string]TaskConfig, afters ma
     for taskName, task := range configs {
         // TODO this apparently is only a copy? how to get a pointer?
         task.Name = taskName
-        slice := make([]TaskConfig, 5, 5) // lenght of x with room for y more
+        slice := make([]TaskConfig, 1, 5) // length of x with room for y more
 
-        // TODO make range dynamic, set to correct one
         for _, after := range task.After {
+            if len(slice) == cap(slice) {
+                newSlice := make([]TaskConfig, len(slice)+1, len(slice)+5)
+                copy(newSlice, slice)
+            }
             afters[after] = slice
-            afters[after][0] = task
+            afters[after] = append(afters[after], task)
         }
     }
 
