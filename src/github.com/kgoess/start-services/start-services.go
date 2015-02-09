@@ -75,39 +75,43 @@ func main(){
 }
 
 func runTask(
-        task TaskConfig, 
-        waitForChs []chan bool, 
-        whenFinishedCallCh chan bool, 
+        task *TaskConfig,
+        waitForChs []chan bool,
+        whenFinishedCallCh chan bool,
         wg *sync.WaitGroup,
     ){
 
-    fmt.Printf("running task %v, after %s will respond on chan %v\n", 
-            task.Cmd, waitForChs, whenFinishedCallCh);
+    fmt.Printf("running task %s %v, after %s will respond on chan %v\n",
+            task.Name, task.Cmd, waitForChs, whenFinishedCallCh);
     wg.Done()
 }
 
 
 
-func loadConfigs(taskYamlPath string ) (configs map[string]TaskConfig, afters map[string][]TaskConfig) {
+func loadConfigs(taskYamlPath string ) (configsPtrs map[string]*TaskConfig, afters map[string][]TaskConfig) {
 
     yamlBytes, err := ioutil.ReadFile(taskYamlPath)
     if err != nil {
         log.Fatalf("error: %v", err)
     }
 
-    configs = map[string]TaskConfig{}
+    configs := map[string]TaskConfig{}
 
     err = yaml.Unmarshal(yamlBytes, &configs)
     if err != nil {
         log.Fatalf("error: %v", err)
     }
 
+    configsPtrs = map[string]*TaskConfig{}
     afters = map[string][]TaskConfig{}
 
-    for taskName, task := range configs {
-        // TODO this apparently is only a copy? how to get a pointer?
+    for taskName, _ := range configs {
+        // "range configs" just gives us the values for each key, we want a pointer 
+        // to the original so we can modify it
+        task := configs["taskName"]
         task.Name = taskName
-        slice := make([]TaskConfig, 1, 5) // length of x with room for y more
+        configsPtrs[taskName] = &task
+        slice := make([]TaskConfig, 0, 5) // length of x with room for y more
 
         for _, after := range task.After {
             if len(slice) == cap(slice) {
@@ -119,9 +123,9 @@ func loadConfigs(taskYamlPath string ) (configs map[string]TaskConfig, afters ma
         }
     }
 
-    return configs, afters
+    return configsPtrs, afters
 }
-func showConfigs(configs map[string]TaskConfig, afters map[string][]TaskConfig){
+func showConfigs(configs map[string]*TaskConfig, afters map[string][]TaskConfig){
     for taskName, task := range configs {
         fmt.Printf("task:  %v (run after: %v)\ndescr: %v\n\t%v\n",
              taskName, task.After, task.Descr, task.Cmd)
