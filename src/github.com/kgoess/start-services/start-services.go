@@ -15,6 +15,9 @@ type TaskConfig struct {
     After []string
     Cmd []string
     Descr string
+    NumToWaitFor int
+    WaitFor chan bool
+    WhenDoneTell []chan bool
 }
 
 
@@ -34,41 +37,13 @@ func main(){
         return
     }
 
-    // give each task its own channel to report 'done' on
-    taskDoneChs := make(map[string]chan bool)
-    for taskName, _ := range configs {
-        taskDoneChs[taskName] = make(chan bool)
-    }
-
-    waitForChsForTask := make(map[string] []chan bool)
-
-    // set up the do-after parts to wait for
-    for taskName, task := range configs {
-        waitForChs := make([]chan bool, 0, 5)
-        for _, afterKey := range task.After {
-            //see http://blog.golang.org/go-slices-usage-and-internals
-            //    var p []int // == nil
-
-            fmt.Printf("after %s we'll run %s\n", afterKey, taskName);
-
-            if len(waitForChs) == cap(waitForChs) {
-                newSlice := make([]chan bool, len(waitForChs) +1, len(waitForChs) + 5)
-                waitForChs = newSlice
-            }
-            waitForChs = append(waitForChs, taskDoneChs[afterKey])
-            fmt.Printf("%v\n", waitForChs)
-            waitForChsForTask[taskName] = waitForChs
-        }
-    }
 
     // now actually run them
     var wg sync.WaitGroup
 
-    for taskName, task := range configs {
-        whenFinishedCallCh := taskDoneChs[taskName]
-        waitForChs := waitForChsForTask[taskName]
+    for _, task := range configs {
         wg.Add(1)
-        go runTask(task, waitForChs, whenFinishedCallCh, &wg);
+        go runTask(task, &wg);
     }
     wg.Wait()
 
@@ -76,13 +51,24 @@ func main(){
 
 func runTask(
         task *TaskConfig,
-        waitForChs []chan bool,
-        whenFinishedCallCh chan bool,
         wg *sync.WaitGroup,
     ){
 
-    fmt.Printf("running task %s %v, after %s will respond on chan %v\n",
-            task.Name, task.Cmd, waitForChs, whenFinishedCallCh);
+    fmt.Printf("in task %s waiting for %v channels\n", task.Name, task.NumToWaitFor);
+    for i := 0; i < task.NumToWaitFor; i++ {
+        select {
+            case <-task.WaitFor:
+        }
+    }
+
+    fmt.Printf("running task %s %v\n", task.Name, task.Cmd, );
+
+    fmt.Printf("in task %s now telling tasks %v they can proceed\n",
+            task.Name, task.WhenDoneTell)
+    for _, ch := range task.WhenDoneTell {
+            ch <- true;
+    }
+
     wg.Done()
 }
 
@@ -105,30 +91,41 @@ func loadConfigs(taskYamlPath string ) (configsPtrs map[string]*TaskConfig, afte
     configsPtrs = map[string]*TaskConfig{}
     afters = map[string][]TaskConfig{}
 
+    // set task.Name, and collect afters in a list
     for taskName, _ := range configs {
         // "range configs" just gives us the values for each key, we want a pointer 
         // to the original so we can modify it
-        task := configs["taskName"]
+        task := configs[taskName]
         task.Name = taskName
         configsPtrs[taskName] = &task
-        slice := make([]TaskConfig, 0, 5) // length of x with room for y more
 
         for _, after := range task.After {
-            if len(slice) == cap(slice) {
-                newSlice := make([]TaskConfig, len(slice)+1, len(slice)+5)
-                copy(newSlice, slice)
-            }
-            afters[after] = slice
             afters[after] = append(afters[after], task)
         }
     }
 
+    // look at all the things that were named in an "after", and set up 
+    // a channel to they need to call when they're done
+    for thisTaskName, afters := range afters {
+        thisTask := configsPtrs[thisTaskName]
+        for _, callWhenFinished := range afters {
+            callWhenFinished := configsPtrs[callWhenFinished.Name]
+            if callWhenFinished.WaitFor == nil {
+                callWhenFinished.WaitFor = make(chan bool, 5)
+            }
+            aChan := callWhenFinished.WaitFor
+            thisTask.WhenDoneTell = append(thisTask.WhenDoneTell, aChan)
+            callWhenFinished.NumToWaitFor++
+        }
+    }
     return configsPtrs, afters
 }
+
+
 func showConfigs(configs map[string]*TaskConfig, afters map[string][]TaskConfig){
     for taskName, task := range configs {
-        fmt.Printf("task:  %v (run after: %v)\ndescr: %v\n\t%v\n",
-             taskName, task.After, task.Descr, task.Cmd)
+        fmt.Printf("task:  %v (run after: %v)\ndescr: %v\n\t%v\n\tNumToWaitFor: %v\n\tWhenDoneTell: %v\n",
+             taskName, task.After, task.Descr, task.Cmd, task.NumToWaitFor, task.WhenDoneTell)
         afterList, exists := afters[taskName]
         if exists {
             for _, after := range afterList {
