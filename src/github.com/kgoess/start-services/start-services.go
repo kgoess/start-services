@@ -53,6 +53,7 @@ func main() {
 		go handleTask(task, taskResultsChan)
 	}
 
+    // and show the results
 	showOutput(len(configs), taskResultsChan)
 
 	t1 := time.Now()
@@ -84,11 +85,12 @@ func handleTask(
 func runTask(task TaskConfig, taskResultsChan chan<- taskResultsMsg) {
 
 	t0 := time.Now()
+    app := task.Cmd[0]
 	args := task.Cmd[1:]
 
 	fmt.Printf("--------------Running task '%s' %v\n", task.Name, task.Cmd)
 
-	cmd := exec.Command(task.Cmd[0], args...)
+	cmd := exec.Command(app, args...)
 
 	stdout, err := cmd.CombinedOutput()
 	stdoutStr := string(stdout[:])
@@ -101,7 +103,7 @@ func runTask(task TaskConfig, taskResultsChan chan<- taskResultsMsg) {
 
 	msg := taskResultsMsg{
 		name:      task.Name,
-		succeeded: err == err,
+		succeeded: err == nil,
 		msg:       stdoutStr,
 		duration:  duration,
 	}
@@ -121,13 +123,13 @@ func showOutput(numTasks int, taskResultsChan <-chan taskResultsMsg) {
 
 func showFinalMsg(numJobs int, duration int64) {
 
-	fmt.Printf("\nFinished %d tasks in %d ms\n", numJobs, duration)
+	fmt.Printf("Finished %d tasks in %d ms\n\n", numJobs, duration)
 
 }
 
 func printTaskResults(msg taskResultsMsg) {
 	fmt.Fprintf(os.Stdout,
-		"--------------task %v success: %5v [%v ms]----------------\n%v\n\n",
+		"--------------Finished '%v' success: %5v [%v ms]----------------\n%v\n\n",
 		msg.name, msg.succeeded, msg.duration, msg.msg,
 	)
 }
