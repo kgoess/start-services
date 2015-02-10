@@ -13,10 +13,12 @@ import (
 )
 
 type TaskConfig struct {
-	Name         string
-	After        []string
-	Cmd          []string
-	Descr        string
+	// these are set in the yaml file
+	Name  string
+	After []string
+	Cmd   []string
+	Descr string
+	// these are set up in loadConfigs
 	NumToWaitFor int
 	WaitFor      chan bool
 	WhenDoneTell []chan bool
@@ -29,7 +31,7 @@ type taskResultsMsg struct {
 	duration  int64
 }
 
-var taskYamlPath = flag.String("taskfile", "", "path to yaml with tasks")
+var taskYamlPath = flag.String("taskfile", "", "[required] path to yaml with tasks")
 var showConfigsFlag = flag.Bool("showconfigs", false, "dump the configs")
 
 func main() {
@@ -205,13 +207,13 @@ func loadConfigs(taskYamlPath string) (configs map[string]TaskConfig, afters map
 
 func showConfigs(configs map[string]TaskConfig, afters map[string][]TaskConfig) {
 	for taskName, task := range configs {
-		fmt.Printf("task:  %v (run after: %v)\ndescr: %v\n\t%v\n\tNumToWaitFor: %v\n\tWhenDoneTell: %v\n",
-			taskName, task.After, task.Descr, task.Cmd, task.NumToWaitFor, task.WhenDoneTell)
+		fmt.Printf("task:  %v (run after: %v)\ndescr: %v\n\t%v\n",
+			taskName, task.After, task.Descr, task.Cmd)
 		afterList, exists := afters[taskName]
 		if exists {
 			for _, after := range afterList {
 				if after.Name != "" {
-					fmt.Printf("after this we'll run: %s\n", after.Name)
+					fmt.Printf("after this we can run: %s\n", after.Name)
 				}
 			}
 		}
