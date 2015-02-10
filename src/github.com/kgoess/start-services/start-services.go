@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	ansi "github.com/mgutz/ansi"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
@@ -53,7 +54,7 @@ func main() {
 		go handleTask(task, taskResultsChan)
 	}
 
-    // and show the results
+	// and show the results
 	showOutput(len(configs), taskResultsChan)
 
 	t1 := time.Now()
@@ -85,10 +86,13 @@ func handleTask(
 func runTask(task TaskConfig, taskResultsChan chan<- taskResultsMsg) {
 
 	t0 := time.Now()
-    app := task.Cmd[0]
+	app := task.Cmd[0]
 	args := task.Cmd[1:]
 
-	fmt.Printf("--------------Running task '%s' %v\n", task.Name, task.Cmd)
+	fmt.Printf(
+		ansi.Color("--------------Running task '%s' %v\n", "cyan"),
+		task.Name, task.Cmd,
+	)
 
 	cmd := exec.Command(app, args...)
 
@@ -128,10 +132,23 @@ func showFinalMsg(numJobs int, duration int64) {
 }
 
 func printTaskResults(msg taskResultsMsg) {
-	fmt.Fprintf(os.Stdout,
-		"--------------Finished '%v' success: %5v [%v ms]----------------\n%v\n\n",
+
+	var successColor string
+	if msg.succeeded == true {
+		successColor = "green+bh"
+	} else {
+		successColor = "red+bh"
+	}
+
+	outstr := fmt.Sprintf(
+		ansi.Color("--------------Finished '%v' ", "green+bh")+
+			ansi.Color("success: %5v ", successColor)+
+			ansi.Color("[%v ms]----------------\n", "green+bh")+
+			ansi.Color("%v\n\n", "cyan"),
 		msg.name, msg.succeeded, msg.duration, msg.msg,
 	)
+
+	fmt.Fprintf(os.Stdout, outstr)
 }
 
 func loadConfigs(taskYamlPath string) (configs map[string]TaskConfig, afters map[string][]TaskConfig) {
@@ -160,8 +177,8 @@ func loadConfigs(taskYamlPath string) (configs map[string]TaskConfig, afters map
 		for _, after := range task.After {
 			afters[after] = append(afters[after], task)
 		}
-        // replace the original with our altered copy
-        configs[taskName] = task
+		// replace the original with our altered copy
+		configs[taskName] = task
 	}
 
 	// look at all the things that were named in an "after", and set up
@@ -177,10 +194,10 @@ func loadConfigs(taskYamlPath string) (configs map[string]TaskConfig, afters map
 			thisTask.WhenDoneTell = append(thisTask.WhenDoneTell, aChan)
 			callWhenFinished.NumToWaitFor++
 
-            // since we're dealing with copies, need to put the new values back
-            // into the list
-            configs[thisTaskName] = thisTask
-            configs[callWhenFinished.Name] = callWhenFinished
+			// since we're dealing with copies, need to put the new values back
+			// into the list
+			configs[thisTaskName] = thisTask
+			configs[callWhenFinished.Name] = callWhenFinished
 		}
 	}
 	return configs, afters
