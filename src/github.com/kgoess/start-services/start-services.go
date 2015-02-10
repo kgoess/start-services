@@ -62,7 +62,7 @@ func main() {
 }
 
 func handleTask(
-	task *TaskConfig,
+	task TaskConfig,
 	taskResultsChan chan<- taskResultsMsg,
 ) {
 
@@ -73,7 +73,7 @@ func handleTask(
 		}
 	}
 
-	runTask(*task, taskResultsChan)
+	runTask(task, taskResultsChan)
 
 	//fmt.Printf("Done with task '%s' now telling tasks %v they can proceed\n",
 	//        task.Name, task.WhenDoneTell)
@@ -134,21 +134,20 @@ func printTaskResults(msg taskResultsMsg) {
 	)
 }
 
-func loadConfigs(taskYamlPath string) (configsPtrs map[string]*TaskConfig, afters map[string][]TaskConfig) {
+func loadConfigs(taskYamlPath string) (configs map[string]TaskConfig, afters map[string][]TaskConfig) {
 
 	yamlBytes, err := ioutil.ReadFile(taskYamlPath)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
 
-	configs := map[string]TaskConfig{}
+	configs = map[string]TaskConfig{}
 
 	err = yaml.Unmarshal(yamlBytes, &configs)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
 
-	configsPtrs = map[string]*TaskConfig{}
 	afters = map[string][]TaskConfig{}
 
 	// set task.Name, and collect afters in a list
@@ -157,31 +156,37 @@ func loadConfigs(taskYamlPath string) (configsPtrs map[string]*TaskConfig, after
 		// to the original so we can modify it
 		task := configs[taskName]
 		task.Name = taskName
-		configsPtrs[taskName] = &task
 
 		for _, after := range task.After {
 			afters[after] = append(afters[after], task)
 		}
+        // replace the original with our altered copy
+        configs[taskName] = task
 	}
 
 	// look at all the things that were named in an "after", and set up
 	// a channel to they need to call when they're done
 	for thisTaskName, afters := range afters {
-		thisTask := configsPtrs[thisTaskName]
+		thisTask := configs[thisTaskName]
 		for _, callWhenFinished := range afters {
-			callWhenFinished := configsPtrs[callWhenFinished.Name]
+			callWhenFinished := configs[callWhenFinished.Name]
 			if callWhenFinished.WaitFor == nil {
 				callWhenFinished.WaitFor = make(chan bool, 5)
 			}
 			aChan := callWhenFinished.WaitFor
 			thisTask.WhenDoneTell = append(thisTask.WhenDoneTell, aChan)
 			callWhenFinished.NumToWaitFor++
+
+            // since we're dealing with copies, need to put the new values back
+            // into the list
+            configs[thisTaskName] = thisTask
+            configs[callWhenFinished.Name] = callWhenFinished
 		}
 	}
-	return configsPtrs, afters
+	return configs, afters
 }
 
-func showConfigs(configs map[string]*TaskConfig, afters map[string][]TaskConfig) {
+func showConfigs(configs map[string]TaskConfig, afters map[string][]TaskConfig) {
 	for taskName, task := range configs {
 		fmt.Printf("task:  %v (run after: %v)\ndescr: %v\n\t%v\n\tNumToWaitFor: %v\n\tWhenDoneTell: %v\n",
 			taskName, task.After, task.Descr, task.Cmd, task.NumToWaitFor, task.WhenDoneTell)
