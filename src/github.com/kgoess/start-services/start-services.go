@@ -7,7 +7,8 @@ import (
         "io/ioutil"
         "log"
         "os"
-        "sync"
+        "os/exec"
+        "time"
 )
 
 type TaskConfig struct {
@@ -20,6 +21,12 @@ type TaskConfig struct {
     WhenDoneTell []chan bool
 }
 
+type taskResultsMsg struct {
+        name      string
+        succeeded bool
+        msg       string
+        duration  int64
+}
 
 var taskYamlPath = flag.String("taskfile", "", "path to yaml with tasks")
 var showConfigsFlag = flag.Bool("showconfigs", false, "dump the configs")
@@ -37,42 +44,95 @@ func main(){
         return
     }
 
+    t0 := time.Now()
 
     // now actually run them
-    var wg sync.WaitGroup
+    taskResultsChan := make(chan taskResultsMsg)
 
     for _, task := range configs {
-        wg.Add(1)
-        go runTask(task, &wg);
+        go handleTask(task, taskResultsChan);
     }
-    wg.Wait()
 
+    showOutput(len(configs), taskResultsChan)
+
+    t1 := time.Now()
+    duration := int64(t1.Sub(t0) / time.Millisecond)
+    showFinalMsg(len(configs), duration)
 }
 
-func runTask(
+func handleTask(
         task *TaskConfig,
-        wg *sync.WaitGroup,
+        taskResultsChan chan<- taskResultsMsg,
     ){
 
-    fmt.Printf("in task %s waiting for %v channels\n", task.Name, task.NumToWaitFor);
+    //fmt.Printf("In task '%s' waiting for %v channels\n", task.Name, task.NumToWaitFor);
     for i := 0; i < task.NumToWaitFor; i++ {
         select {
             case <-task.WaitFor:
         }
     }
 
-    fmt.Printf("running task %s %v\n", task.Name, task.Cmd, );
+    runTask(*task, taskResultsChan)
 
-    fmt.Printf("in task %s now telling tasks %v they can proceed\n",
-            task.Name, task.WhenDoneTell)
+    //fmt.Printf("Done with task '%s' now telling tasks %v they can proceed\n",
+    //        task.Name, task.WhenDoneTell)
     for _, ch := range task.WhenDoneTell {
             ch <- true;
     }
+}
 
-    wg.Done()
+func runTask(task TaskConfig, taskResultsChan chan<- taskResultsMsg) {
+
+        t0 := time.Now()
+        args := task.Cmd[1:]
+
+        fmt.Printf("--------------Running task '%s' %v\n", task.Name, task.Cmd, );
+
+        cmd := exec.Command(task.Cmd[0], args...)
+
+        stdout, err := cmd.CombinedOutput()
+        stdoutStr := string(stdout[:])
+        if err != nil {
+                stdoutStr += err.Error()
+        }
+        t1 := time.Now()
+
+        duration := int64(t1.Sub(t0) / time.Millisecond)
+
+        msg := taskResultsMsg{
+                name:      task.Name,
+                succeeded: err == err,
+                msg:       stdoutStr,
+                duration:  duration,
+        }
+
+        taskResultsChan <- msg
 }
 
 
+
+func showOutput(numTasks int, taskResultsChan <-chan taskResultsMsg) {
+
+    for i := 0; i < numTasks; i++ {
+            select {
+            case msg := <-taskResultsChan:
+                    printTaskResults(msg)
+            }
+    }
+}
+
+func showFinalMsg(numJobs int, duration int64){
+
+    fmt.Printf("\nFinished %d tasks in %d ms\n", numJobs, duration);
+
+}
+
+func printTaskResults(msg taskResultsMsg) {
+        fmt.Fprintf(os.Stdout,
+                "--------------task %v success: %5v [%v ms]----------------\n%v\n\n",
+                msg.name, msg.succeeded, msg.duration, msg.msg,
+        )
+}
 
 func loadConfigs(taskYamlPath string ) (configsPtrs map[string]*TaskConfig, afters map[string][]TaskConfig) {
 
