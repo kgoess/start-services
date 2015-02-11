@@ -69,23 +69,47 @@ func handleTask(
 	taskResultsChan chan<- taskResultsMsg,
 ) {
 
+	someFailed := false
+
 	//fmt.Printf("In task '%s' waiting for %v channels\n", task.Name, task.NumToWaitFor);
 	for i := 0; i < task.NumToWaitFor; i++ {
 		select {
-		case <-task.WaitFor:
+		case result := <-task.WaitFor:
+			if !result {
+				someFailed = true
+			}
 		}
 	}
 
-	runTask(task, taskResultsChan)
+	var taskRanOk bool
+	if someFailed {
+		fmt.Printf(
+			ansi.Color("--------------Not running '%s' because of failures in the chain\n", "red+bh"),
+			task.Name)
+		taskRanOk = false
+		msg := taskResultsMsg{
+			name:      task.Name,
+			succeeded: false,
+			msg:       "Didn't run because of previous job failures",
+			duration:  0,
+		}
+		taskResultsChan <- msg
+	} else {
+		taskRanOk = runTask(task, taskResultsChan)
+	}
 
 	//fmt.Printf("Done with task '%s' now telling tasks %v they can proceed\n",
 	//        task.Name, task.WhenDoneTell)
+	payItForward := true
+	if someFailed || !taskRanOk {
+		payItForward = false
+	}
 	for _, ch := range task.WhenDoneTell {
-		ch <- true
+		ch <- payItForward
 	}
 }
 
-func runTask(task TaskConfig, taskResultsChan chan<- taskResultsMsg) {
+func runTask(task TaskConfig, taskResultsChan chan<- taskResultsMsg) bool {
 
 	t0 := time.Now()
 	app := task.Cmd[0]
@@ -115,6 +139,8 @@ func runTask(task TaskConfig, taskResultsChan chan<- taskResultsMsg) {
 	}
 
 	taskResultsChan <- msg
+
+	return err == nil
 }
 
 func showOutput(numTasks int, taskResultsChan <-chan taskResultsMsg) {
