@@ -18,7 +18,7 @@ type TaskConfig struct {
 	After []string
 	Cmd   []string
 	Descr string
-	// these are set up in loadConfigs
+	// these are set up in loadConfigs which links up the jobs to channels
 	NumToWaitFor int
 	WaitFor      chan bool
 	WhenDoneTell []chan bool
@@ -49,7 +49,7 @@ func main() {
 
 	t0 := time.Now()
 
-	// now actually run them
+	// now actually run them, in parallel
 	taskResultsChan := make(chan taskResultsMsg)
 
 	for _, task := range configs {
@@ -69,47 +69,52 @@ func handleTask(
 	taskResultsChan chan<- taskResultsMsg,
 ) {
 
-	someFailed := false
+	somePreviousFailed := false
+
+	// first wait for any prerequisites to finish and succeed
 
 	//fmt.Printf("In task '%s' waiting for %v channels\n", task.Name, task.NumToWaitFor);
 	for i := 0; i < task.NumToWaitFor; i++ {
 		select {
 		case result := <-task.WaitFor:
 			if !result {
-				someFailed = true
+				somePreviousFailed = true
 			}
 		}
 	}
 
-	var taskRanOk bool
-	if someFailed {
+	// either handle that failure or run this task
+
+	var msg taskResultsMsg
+
+	if somePreviousFailed {
 		fmt.Printf(
 			ansi.Color("--------------Not running '%s' because of failures in the chain\n", "red+bh"),
 			task.Name)
-		taskRanOk = false
-		msg := taskResultsMsg{
+		msg = taskResultsMsg{
 			name:      task.Name,
 			succeeded: false,
 			msg:       "Didn't run because of previous job failures",
 			duration:  0,
 		}
-		taskResultsChan <- msg
 	} else {
-		taskRanOk = runTask(task, taskResultsChan)
+		msg = runTask(task)
 	}
+
+	// tell the output channel what the results were
+	taskResultsChan <- msg
+
+	// tell succeeding tasks they can now continue
 
 	//fmt.Printf("Done with task '%s' now telling tasks %v they can proceed\n",
 	//        task.Name, task.WhenDoneTell)
-	payItForward := true
-	if someFailed || !taskRanOk {
-		payItForward = false
-	}
+	payItForward := msg.succeeded
 	for _, ch := range task.WhenDoneTell {
 		ch <- payItForward
 	}
 }
 
-func runTask(task TaskConfig, taskResultsChan chan<- taskResultsMsg) bool {
+func runTask(task TaskConfig) taskResultsMsg {
 
 	t0 := time.Now()
 	app := task.Cmd[0]
@@ -122,10 +127,10 @@ func runTask(task TaskConfig, taskResultsChan chan<- taskResultsMsg) bool {
 
 	cmd := exec.Command(app, args...)
 
-	stdout, err := cmd.CombinedOutput()
-	stdoutStr := string(stdout[:])
+	outputBytes, err := cmd.CombinedOutput()
+	outputStr := string(outputBytes[:])
 	if err != nil {
-		stdoutStr += err.Error()
+		outputStr += err.Error()
 	}
 	t1 := time.Now()
 
@@ -134,15 +139,16 @@ func runTask(task TaskConfig, taskResultsChan chan<- taskResultsMsg) bool {
 	msg := taskResultsMsg{
 		name:      task.Name,
 		succeeded: err == nil,
-		msg:       stdoutStr,
+		msg:       outputStr,
 		duration:  duration,
 	}
 
-	taskResultsChan <- msg
-
-	return err == nil
+	return msg
 }
 
+/* func showOutput
+   wait on the results channel and print them to the screen as they come in
+*/
 func showOutput(numTasks int, taskResultsChan <-chan taskResultsMsg) {
 
 	for i := 0; i < numTasks; i++ {
@@ -179,6 +185,19 @@ func printTaskResults(msg taskResultsMsg) {
 	fmt.Fprintf(os.Stdout, outstr)
 }
 
+//The YAML data looks like this:
+//
+//    task4:
+//      after:
+//         - task1
+//         - task2
+//      cmd:
+//        - /bin/echo
+//        - Wheeeee!
+//      descr: this task goes after 1 and 2
+//
+//which says "run task4 after task1 and task2 have finished successsfully". I
+// just thought it read better that way.
 func loadConfigs(taskYamlPath string) (configs map[string]TaskConfig, afters map[string][]TaskConfig) {
 
 	yamlBytes, err := ioutil.ReadFile(taskYamlPath)
@@ -195,22 +214,25 @@ func loadConfigs(taskYamlPath string) (configs map[string]TaskConfig, afters map
 
 	afters = map[string][]TaskConfig{}
 
-	// set task.Name, and collect afters in a list
+	// set task.Name, and collect "afters" in a list
+	// so we can see what runs after this task, as opposed
+	// to what this task runs after
 	for taskName, _ := range configs {
-		// "range configs" just gives us the values for each key, we want a pointer
-		// to the original so we can modify it
 		task := configs[taskName]
 		task.Name = taskName
 
 		for _, after := range task.After {
 			afters[after] = append(afters[after], task)
 		}
-		// replace the original with our altered copy
+		// "range configs" gives us copies of the value, so if we alter the
+		// data members, we want to replace the original in the map with our
+		// altered copy
 		configs[taskName] = task
 	}
 
 	// look at all the things that were named in an "after", and set up
-	// a channel to they need to call when they're done
+	// a channel for them to call when they're done, connected to the
+	// task that's waiting for them to finish
 	for thisTaskName, afters := range afters {
 		thisTask := configs[thisTaskName]
 		for _, callWhenFinished := range afters {
