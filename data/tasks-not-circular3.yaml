@@ -1,0 +1,37 @@
+---
+# This demonstrates what happens when a job in a chain fails
+task1:
+  cmd:
+    - /bin/echo
+    - blah blah blah
+  descr: this task just runs echo
+task2:
+  after:
+    - task1
+  cmd:
+    - /bin/sleep
+    - 3
+  descr: after task1
+task3:
+  after: 
+    - task1
+  cmd:
+    - /bin/ls
+    - adsfadfasdf
+  descr: after task1
+task4:
+  after:
+     - task1
+     - task2
+     - task3
+  cmd:
+    - /bin/echo
+    - Wheeeee!
+  descr: this task goes after 1 and 2 and 3
+task5:
+  after:
+    - task4
+  cmd:
+    - /bin/echo
+    - final task
+  descr: this is after task 4
