@@ -1,0 +1,28 @@
+---
+task1:
+  cmd:
+    - /bin/echo
+    - blah blah blah
+  descr: this task just runs echo
+task2:
+  after:
+    - task4
+  cmd:
+    - /bin/sleep
+    - 3
+  descr: after task4, circularity!
+task3:
+  after: 
+    - task2
+  cmd:
+    - /bin/ls
+    - adsfadfasdf
+  descr: this is expected to fail
+task4:
+  after:
+     - task1
+     - task2
+  cmd:
+    - /bin/echo
+    - Wheeeee!
+  descr: this task goes after 1 and 2
