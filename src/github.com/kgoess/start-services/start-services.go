@@ -229,38 +229,54 @@ func loadConfigs(taskYamlPath string) (configs map[string]TaskConfig, afters map
 		}
 	}
 
-    for _, task := range configs {
-        seen := make(map[string] bool)
-        seen[ task.Name ] = true
-        checkNoCircular(task, afters, seen, configs)
-    }
+	for _, task := range configs {
+		seen := make(map[string]string)
+		seen[task.Name] = "root config"
+		checkNoCircular(task, afters, seen, configs)
+	}
 	return configs, afters
 }
 
 // We look at this task and follow the list of tasks scheduled to come after it.
 // If we see any task twice, it's circular
 func checkNoCircular(
-        task TaskConfig,
-        afters map[string][]TaskConfig,
-        seen map[string] bool,
-        configs map[string]TaskConfig,
-    ){
-    for _, nextTask := range afters[task.Name] {
-        if seen[nextTask.Name] {
-            showConfigs(configs, afters)
-            fmt.Fprintf(os.Stderr,
-                    ansi.Color("circular dependency in %s!\n", "red+bh"),
-                    nextTask.Name,
-                )
-            os.Exit(1)
-        }
-        seen[nextTask.Name] = true
-        copySeen := make(map[string] bool)
-        for k, v := range seen {
-            copySeen[k] = v
-        }
-        checkNoCircular(nextTask, afters, copySeen, configs)
-    }
+	task TaskConfig,
+	afters map[string][]TaskConfig,
+	seen map[string]string,
+	configs map[string]TaskConfig,
+) {
+	for _, nextTask := range afters[task.Name] {
+		_, alreadySeen := seen[nextTask.Name]
+		if alreadySeen {
+			showCircularDepsMsg(task.Name, seen, configs, afters)
+			os.Exit(1)
+		}
+		seen[nextTask.Name] = task.Name
+		copySeen := make(map[string]string)
+		for k, v := range seen {
+			copySeen[k] = v
+		}
+		checkNoCircular(nextTask, afters, copySeen, configs)
+	}
+}
+
+func showCircularDepsMsg(
+	taskName string,
+	seen map[string]string,
+	configs map[string]TaskConfig,
+	afters map[string][]TaskConfig,
+) {
+	showConfigs(configs, afters)
+	outstr := ""
+	for k, _ := range seen {
+		outstr += k + " -> "
+	}
+	outstr += taskName
+	fmt.Fprintf(os.Stderr,
+		ansi.Color("circular dependency for %s from the chain where %v!\n",
+			"red+bh"),
+		taskName, outstr,
+	)
 }
 
 func showConfigs(configs map[string]TaskConfig, afters map[string][]TaskConfig) {
