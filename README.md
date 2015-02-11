@@ -31,7 +31,7 @@ Based on a tasks.yaml file like this:
       descr: this task goes after 1 and 2
 ```
 
-You'd get output like this:
+you'd get output like this:
 
    ./bin/start-services  --taskfile data/tasks.yaml
 
